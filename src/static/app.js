@@ -20,14 +20,79 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        const participantsList = details.participants.map(p => `
+          <li>
+            <span class="participant-name">${p}</span>
+            <button class="remove-participant" data-email="${p}" title="Remove ${p}" aria-label="Remove ${p}">×</button>
+          </li>
+        `).join('');
+
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
-          <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <p class="availability"><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <div class="participants">
+            <div class="participants-title">Participants (<span class="count">${details.participants.length}</span>)</div>
+            <ul class="participants-list">
+              ${participantsList}
+            </ul>
+          </div>
         `;
 
         activitiesList.appendChild(activityCard);
+
+        // Attach remove handlers for this activity's participant buttons
+        activityCard.querySelectorAll('.remove-participant').forEach((btn) => {
+          btn.addEventListener('click', async (e) => {
+            const email = btn.dataset.email;
+            if (!confirm(`Remove ${email} from ${name}?`)) return;
+
+            try {
+              const res = await fetch(
+                `/activities/${encodeURIComponent(name)}/signup?email=${encodeURIComponent(email)}`,
+                { method: 'DELETE' }
+              );
+
+              const result = await res.json();
+
+              if (res.ok) {
+                // update in-memory details and UI
+                details.participants = details.participants.filter(p => p !== email);
+
+                // remove the list item
+                const li = btn.closest('li');
+                if (li) li.remove();
+
+                // update counts and availability
+                const countSpan = activityCard.querySelector('.participants .count');
+                if (countSpan) countSpan.textContent = details.participants.length;
+
+                const availabilityP = activityCard.querySelector('.availability');
+                if (availabilityP) {
+                  const newSpots = details.max_participants - details.participants.length;
+                  availabilityP.textContent = `Availability: ${newSpots} spots left`;
+                }
+
+                // show success message briefly
+                messageDiv.textContent = result.message;
+                messageDiv.className = 'success';
+                messageDiv.classList.remove('hidden');
+                setTimeout(() => messageDiv.classList.add('hidden'), 3000);
+              } else {
+                messageDiv.textContent = result.detail || 'Failed to remove participant';
+                messageDiv.className = 'error';
+                messageDiv.classList.remove('hidden');
+                setTimeout(() => messageDiv.classList.add('hidden'), 5000);
+              }
+            } catch (error) {
+              messageDiv.textContent = 'Failed to remove participant. Please try again.';
+              messageDiv.className = 'error';
+              messageDiv.classList.remove('hidden');
+              console.error('Error removing participant:', error);
+            }
+          });
+        });
 
         // Add option to select dropdown
         const option = document.createElement("option");
